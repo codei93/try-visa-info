@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": {
+    "supabase": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/supabase/SKILL.md",
+      "computedHash": "45a3cdccc364a4bbd6cdf700fc069e9f24ebc0428098746cbfbf8b18a5e160d2"
+    },
+    "supabase-postgres-best-practices": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
+      "computedHash": "d606a1146be6d54fb9e73f718b5320b9acac5ff2ba2d7230a555df4b5a923b4a"
+    },
+    "infer-conventions": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "skills/infer-conventions/SKILL.md",
+      "computedHash": "5dc970c99dd6262fc7eac4dfe1d693a5f6ad5802af24e859ca525c73c883fd18"
+    },
+    "migrate-radix-to-base": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "skills/migrate-radix-to-base/SKILL.md",
+      "computedHash": "64c879f6f1eab0decc306ca52ad32d41327c05c4d2fb7e708335e956c61dadf8"
+    },
+    "tailwindcss-development": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "skills/tailwindcss-development/SKILL.md",
+      "computedHash": "77c96a1c5af6a1f071d68fa6b91b49edbed36902d04c694d9b2c82c89b06970a"
+    },
+    "shadcn": {
+      "source": "shadcn-ui/ui",
+      "sourceType": "github",
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "93951e5e83f616a3e046491c00d770bd54c0a64164706cd1191822a233d27592"
+    },
+    "testing-best-practices": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "skills/testing-best-practices/SKILL.md",
+      "computedHash": "52df390c9edb12c03cd87c289e648ee4c849da2b449a0886ce609fa30547c52a"
+    },
+    "nextjs": {
+      "source": "context7",
+      "sourceType": "context7",
+      "skillPath": "skills/nextjs/SKILL.md",
+      "computedHash": "41a3b465c0b192dace864d1decde0d28766f5fb5e200c3e11e54d39ed0a06d68"
+    },
+    "tailwindcss": {
+      "source": "context7",
+      "sourceType": "context7",
+      "skillPath": "skills/tailwindcss/SKILL.md",
+      "computedHash": "8e560c1297ae43a21d1050da8712865828c5be99d3fb5014141c9c55d47ab39d"
+    },
+    "shadcn-docs": {
+      "source": "context7",
+      "sourceType": "context7",
+      "skillPath": "skills/shadcn-docs/SKILL.md",
+      "computedHash": "4d1a0e334174b9ecfd7aa016fff2442a01e03fd175a501c02d5a27aed90e4ac8"
+    }
+  }
+}
