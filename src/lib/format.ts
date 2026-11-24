@@ -1,5 +1,6 @@
 // src/lib/format.ts
-// Formatters for structured values (fees, days) using Intl.NumberFormat.
+// Locale-aware formatters for structured values (fees, days).
+// Pure functions: safe in both server and client components.
 
 import type { Locale } from '@/types/database';
 
@@ -11,60 +12,67 @@ const localeToIntl: Record<Locale, string> = {
 };
 
 /**
- * Format a fee amount using Intl.NumberFormat for the given locale and currency.
+ * Format a fee amount as currency for the given locale.
+ * Returns `fallback` (already translated by the caller) when the amount is unknown.
  */
 export function formatFee(
-  amount: number | null,
-  currency = 'USD',
-  locale: Locale = 'en'
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+  locale: Locale = 'en',
+  fallback = ''
 ): string {
-  if (amount === null || amount === undefined) return 'Varies';
+  if (amount === null || amount === undefined || !currency) return fallback;
   return new Intl.NumberFormat(localeToIntl[locale], {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
-/**
- * Format a fee range (min–max) with currency.
- */
+/** Format a fee range (min–max). Unknown ends fall back to the translated string. */
 export function formatFeeRange(
-  min: number | null,
-  max: number | null,
-  currency = 'USD',
-  locale: Locale = 'en'
+  min: number | null | undefined,
+  max: number | null | undefined,
+  currency: string | null | undefined,
+  locale: Locale = 'en',
+  fallback = ''
 ): string {
-  if (min === null && max === null) return 'Varies';
-  if (min === null) return `Up to ${formatFee(max, currency, locale)}`;
-  if (max === null) return `From ${formatFee(min, currency, locale)}`;
-  return `${formatFee(min, currency, locale)}–${formatFee(max, currency, locale)}`;
+  if (min == null && max == null) return fallback;
+  if (min == null || max == null || min === max) {
+    return formatFee((min ?? max) as number, currency, locale, fallback);
+  }
+  return `${formatFee(min, currency, locale, fallback)}–${formatFee(max, currency, locale, fallback)}`;
 }
 
-/**
- * Format processing days as a range (e.g. "3–10 days").
- */
+function days(n: number, locale: Locale): string {
+  return new Intl.NumberFormat(localeToIntl[locale], {
+    style: 'unit',
+    unit: 'day',
+    unitDisplay: 'long',
+  }).format(n);
+}
+
+/** "3–10 days" in the page language; fallback when unknown. */
 export function formatProcessingDays(
-  min: number,
-  max: number
+  min: number | null | undefined,
+  max: number | null | undefined,
+  locale: Locale = 'en',
+  fallback = ''
 ): string {
-  if (min === max) return `${min} day${min !== 1 ? 's' : ''}`;
-  return `${min}–${max} days`;
+  if (min == null && max == null) return fallback;
+  if (min == null || max == null || min === max) return days((min ?? max) as number, locale);
+  const nf = new Intl.NumberFormat(localeToIntl[locale]);
+  const unit = days(max, locale).replace(nf.format(max), '').trim();
+  return `${nf.format(min)}–${nf.format(max)} ${unit}`;
 }
 
-/**
- * Format max stay days (nullable).
- */
-export function formatMaxStay(days: number | null): string {
-  if (days === null) return 'Varies';
-  return `${days} days`;
-}
-
-/**
- * Format validity days (nullable).
- */
-export function formatValidity(days: number | null): string {
-  if (days === null) return 'Varies';
-  return `${days} days`;
+/** Max stay / validity in days; fallback when unknown. */
+export function formatDays(
+  value: number | null | undefined,
+  locale: Locale = 'en',
+  fallback = ''
+): string {
+  if (value == null) return fallback;
+  return days(value, locale);
 }

@@ -1,26 +1,18 @@
+import "server-only";
+import { cache } from "react";
 import { supabase } from "@/lib/supabase/server";
-import { t, tArray, flagFromIso } from "@/lib/localized";
-import {
-  formatFee,
-  formatFeeRange,
-  formatProcessingDays,
-  formatMaxStay,
-  formatValidity,
-} from "@/lib/format";
 import type {
   Country,
   VisaType,
   VisaRequirement,
-  BlogPost,
   BlogPostWithTranslation,
-  FeeItem,
+  Locale,
 } from "@/types/database";
-import type { Locale } from "@/types/database";
 
-/**
- * Popular routes — curated featured list (kept static).
- * These are the routes shown on the homepage.
- */
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+/** Featured routes shown on the homepage (every pair must exist in the database). */
 export const popularRoutes: [string, string][] = [
   ["uganda", "usa"],
   ["nigeria", "uk"],
@@ -36,425 +28,176 @@ export const popularRoutes: [string, string][] = [
   ["tanzania", "japan"],
 ];
 
-/**
- * Fetch all origin countries from Supabase.
- * Returns raw data with locale-keyed `name` jsonb — client localizes via `t()`.
- * Flag emoji is derived from `iso_code` in the client via `flagFromIso()`.
- */
 export async function getOrigins(): Promise<Country[]> {
   const { data, error } = await supabase
     .from("countries")
     .select("*")
     .eq("is_origin", true)
     .order("name->>en");
-
   if (error) throw error;
   return (data ?? []) as Country[];
 }
 
-/**
- * Fetch all destination countries from Supabase.
- */
 export async function getDestinations(): Promise<Country[]> {
   const { data, error } = await supabase
     .from("countries")
     .select("*")
     .eq("is_destination", true)
     .order("name->>en");
-
   if (error) throw error;
   return (data ?? []) as Country[];
 }
 
-/**
- * Fetch a single country by slug.
- */
-export async function getDestination(slug: string): Promise<Country | null> {
+/** Fetch one country by slug (deduplicated per request via React cache). */
+export const getCountry = cache(async (slug: string): Promise<Country | null> => {
   const { data, error } = await supabase
     .from("countries")
     .select("*")
     .eq("slug", slug)
-    .single();
-
+    .maybeSingle();
   if (error) return null;
   return (data ?? null) as Country | null;
-}
+});
 
-/**
- * Fetch a single country by slug.
- */
-export async function getCountry(slug: string): Promise<Country | null> {
-  const { data, error } = await supabase
-    .from("countries")
-    .select("*")
-    .eq("slug", slug)
-    .single();
+export const getDestination = getCountry;
 
-  if (error) return null;
-  return (data ?? null) as Country | null;
-}
-
-/**
- * Fetch all visa types for a destination country.
- * Returns raw data with locale-keyed `name`/`description` jsonb,
- * including default_mandatory_docs, default_supporting_docs, default_steps
- * that serve as template defaults for visa_requirements overrides.
- */
-export async function getVisaTypes(dest: string): Promise<VisaType[]> {
+/** All visa types of a destination (the templates), ordered by code. */
+export const getVisaTypes = cache(async (dest: string): Promise<VisaType[]> => {
   const destCountry = await getCountry(dest);
   if (!destCountry) return [];
-
   const { data, error } = await supabase
     .from("visa_types")
     .select("*")
     .eq("destination_id", destCountry.id)
     .order("code");
-
   if (error) throw error;
   return (data ?? []) as VisaType[];
-}
+});
 
 /**
- * Fetch the visa requirement for an origin/destination route, optionally filtered by visa type code.
- * Implements the template + override model:
- *   - If a visa_requirements row exists with non-NULL detail columns, those values are used.
- *   - If a column is NULL, the corresponding visa_types default is used instead.
- *   - If no visa_requirements row exists at all, a generic fallback is generated from visa_types.
+ * The baseline requirement for an origin -> destination pair, merged with the
+ * destination's visa_types template: a non-null value on the visa_requirements
+ * row wins, otherwise the template default is used. Unknown values stay null.
  *
- * Returns a VisaRequirement with all detail columns resolved (no NULLs).
- * Falls back to generic guidance when no detailed record exists in the database.
+ * Returns null when the pair has no row, so the page can return a real 404
+ * instead of inventing a "generic" page for a route we have no data for.
  */
-export async function getRequirement(
-  origin: string,
-  destination: string,
-  typeCode?: string
-): Promise<VisaRequirement | null> {
-  const o = await getCountry(origin);
-  const d = await getCountry(destination);
-  if (!o || !d) return null;
+export const getRequirement = cache(
+  async (origin: string, destination: string): Promise<VisaRequirement | null> => {
+    const [o, d] = await Promise.all([getCountry(origin), getCountry(destination)]);
+    if (!o || !d) return null;
 
-  let query = supabase
-    .from("visa_requirements")
-    .select("*")
-    .eq("origin_id", o.id)
-    .eq("destination_id", d.id);
+    const { data: row, error } = await supabase
+      .from("visa_requirements")
+      .select("*")
+      .eq("origin_id", o.id)
+      .eq("destination_id", d.id)
+      .is("type_code", null)
+      .maybeSingle();
+    if (error || !row) return null;
 
-  if (typeCode) {
-    query = query.eq("type_code", typeCode);
+    const types = await getVisaTypes(d.slug);
+    const type = types.find((x) => x.code === row.type_code) ?? types[0];
+
+    const resolved: VisaRequirement = {
+      id: row.id,
+      origin_id: o.id,
+      destination_id: d.id,
+      type_code: row.type_code ?? null,
+      status: row.status,
+      visa_free_days: row.visa_free_days ?? null,
+      visa_type: row.visa_type ?? type?.name ?? ({ en: "" } as VisaType["name"]),
+      entry_type: row.entry_type ?? null,
+      validity_days: row.validity_days ?? null,
+      max_stay_days: row.max_stay_days ?? type?.stay_days_max ?? null,
+      processing_days_min: row.processing_days_min ?? type?.processing_days_min ?? null,
+      processing_days_max: row.processing_days_max ?? type?.processing_days_max ?? null,
+      fee_amount: row.fee_amount ?? type?.fee_amount ?? null,
+      fee_currency: row.fee_currency ?? type?.fee_currency ?? null,
+      mandatory_docs: row.mandatory_docs ?? type?.default_mandatory_docs ?? { en: [] },
+      supporting_docs: row.supporting_docs ?? type?.default_supporting_docs ?? { en: [] },
+      steps: row.steps ?? type?.default_steps ?? { en: [] },
+      fees: row.fees ?? [],
+      fee_total_min: row.fee_total_min ?? null,
+      fee_total_max: row.fee_total_max ?? null,
+      apply_url: row.apply_url || type?.apply_url || null,
+      embassy_url: row.embassy_url || type?.embassy_url || null,
+      source_url: row.source_url ?? type?.source_url ?? null,
+      last_verified: row.last_verified ?? null,
+      detailed: row.detailed,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+    return resolved;
   }
+);
 
-  const { data: reqRow, error } = await query.single();
+type Pair = { origin: string; destination: string };
 
-  // No requirement row at all — generate generic fallback from visa_types
-  if (error || !reqRow) {
-    return getGenericRequirement(o, d, typeCode);
-  }
-
-  // Fetch visa_types defaults for fallback when req columns are NULL
-  const types = await getVisaTypes(d.slug);
-  const type = types.find((t) => t.code === (reqRow.type_code ?? typeCode ?? types[0]?.code)) ?? types[0];
-
-  if (!type) return null;
-
-  // Resolve each field: use req value if non-NULL, otherwise fall back to visa_types default
-  const resolved: VisaRequirement = {
-    id: reqRow.id,
-    origin_id: o.id,
-    destination_id: d.id,
-    type_code: reqRow.type_code ?? undefined,
-    visa_required: reqRow.visa_required,
-    visa_type: reqRow.visa_type ?? type.name,
-    entry_type: reqRow.entry_type ?? "multiple",
-    validity_days: reqRow.validity_days ?? null,
-    max_stay_days: reqRow.max_stay_days ?? type.stay_days_max ?? null,
-    processing_days_min: reqRow.processing_days_min ?? type.processing_days_min,
-    processing_days_max: reqRow.processing_days_max ?? type.processing_days_max,
-    official_fee_amount: reqRow.official_fee_amount ?? type.fee_amount,
-    official_fee_currency: reqRow.official_fee_currency ?? type.fee_currency,
-    mandatory_docs: reqRow.mandatory_docs ?? type.default_mandatory_docs,
-    supporting_docs: reqRow.supporting_docs ?? type.default_supporting_docs,
-    steps: reqRow.steps ?? type.default_steps,
-    fees: reqRow.fees ?? [],
-    fee_total_min: reqRow.fee_total_min ?? null,
-    fee_total_max: reqRow.fee_total_max ?? null,
-    apply_url: reqRow.apply_url ?? type.apply_url,
-    embassy_url: reqRow.embassy_url ?? type.embassy_url,
-    source_url: reqRow.source_url ?? type.source_url,
-    last_verified: reqRow.last_verified ?? type.last_verified ?? new Date().toISOString().split("T")[0],
-    detailed: reqRow.detailed,
-    created_at: reqRow.created_at,
-    updated_at: reqRow.updated_at,
-  };
-
-  return resolved as VisaRequirement;
-}
-
-/**
- * Build a generic visa requirement fallback when no detailed DB record exists.
- * Uses the destination's visa types for type-specific info.
- */
-async function getGenericRequirement(
-  o: Country,
-  d: Country,
-  typeCode?: string
-): Promise<VisaRequirement | null> {
-  const types = await getVisaTypes(d.slug);
-  if (types.length === 0) return null;
-
-  const type = types.find((t) => t.code === typeCode) ?? types[0];
-
-  const dName = t(d.name, "en") ?? d.name;
-  const oName = t(o.name, "en") ?? o.name;
-
-  return {
-    id: "",
-    origin_id: o.id,
-    destination_id: d.id,
-    type_code: type.code,
-    visa_required: "yes",
-    visa_type: {
-      en: type.name.en,
-      fr: type.name.fr,
-      es: type.name.es,
-      ar: type.name.ar,
-    },
-    entry_type: "multiple",
-    validity_days: null,
-    max_stay_days: type.stay_days_max ?? null,
-    processing_days_min: type.processing_days_min,
-    processing_days_max: type.processing_days_max,
-    official_fee_amount: type.fee_amount,
-    official_fee_currency: type.fee_currency,
-    mandatory_docs: type.default_mandatory_docs,
-    supporting_docs: type.default_supporting_docs,
-    steps: type.default_steps,
-    fees: [],
-    fee_total_min: null,
-    fee_total_max: null,
-    apply_url: type.apply_url ?? `https://www.google.com/search?q=${encodeURIComponent(`${dName} official visa application`)}`,
-    embassy_url: type.embassy_url ?? `https://www.google.com/search?q=${encodeURIComponent(`${dName} embassy in ${oName}`)}`,
-    source_url: type.source_url,
-    last_verified: type.last_verified ?? new Date().toISOString().split("T")[0],
-    detailed: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-/**
- * Fetch all origin/destination pairs that have detailed (hand-verified) requirements.
- * Used for sitemap generation — only detailed routes get individual static pages.
- */
-export async function getAllDetailedRoutePairs(): Promise<{
-  origin: string;
-  destination: string;
-  typeCode?: string;
-}[]> {
-  const { data } = await supabase
+async function loadPairs(onlyDetailed: boolean): Promise<Pair[]> {
+  let q = supabase
     .from("visa_requirements")
-    .select("origin_id, destination_id, type_code")
-    .eq("detailed", true);
-
-  if (!data) return [];
-
-  // Resolve UUIDs to slugs
-  const { data: countries } = await supabase.from("countries").select("id, slug");
-  if (!countries) return [];
-
-  const idToSlug = new Map(countries.map((c) => [c.id, c.slug]));
-
-  return data
-    .map((row) => ({
-      origin: idToSlug.get(row.origin_id)!,
-      destination: idToSlug.get(row.destination_id)!,
-      typeCode: row.type_code ?? undefined,
+    .select("origin_id, destination_id, detailed")
+    .is("type_code", null);
+  if (onlyDetailed) q = q.eq("detailed", true);
+  const [{ data: rows, error }, { data: countries }] = await Promise.all([
+    q,
+    supabase.from("countries").select("id, slug"),
+  ]);
+  if (error || !rows || !countries) return [];
+  const slug = new Map(countries.map((c) => [c.id as string, c.slug as string]));
+  return rows
+    .map((r) => ({
+      origin: slug.get(r.origin_id) as string,
+      destination: slug.get(r.destination_id) as string,
     }))
     .filter((p) => p.origin && p.destination);
 }
 
-/**
- * Return every origin/destination pair for static pre-rendering.
- * Computes the cartesian product of all countries × all countries.
- */
-export async function getAllOriginDestinationPairs(): Promise<{
-  origin: string;
-  destination: string;
-}[]> {
-  const { data: origins } = await supabase.from("countries").select("slug");
-  const { data: destinations } = await supabase.from("countries").select("slug");
-
-  const pairs: { origin: string; destination: string }[] = [];
-  for (const o of origins ?? []) {
-    for (const d of destinations ?? []) {
-      pairs.push({ origin: o.slug, destination: d.slug });
-    }
-  }
-  return pairs;
+/** Every origin/destination pair that has a row: used for static generation. */
+export async function getAllOriginDestinationPairs(): Promise<Pair[]> {
+  return loadPairs(false);
 }
 
-/**
- * Return all destination slugs for visa-types static pre-rendering.
- */
+/** Only hand-verified pairs: used for the sitemap. */
+export async function getAllDetailedRoutePairs(): Promise<Pair[]> {
+  return loadPairs(true);
+}
+
+/** Destinations that actually have a requirement row for this origin. */
+export async function getDestinationsForOrigin(origin: string): Promise<Country[]> {
+  const o = await getCountry(origin);
+  if (!o) return [];
+  const [{ data: rows }, destinations] = await Promise.all([
+    supabase
+      .from("visa_requirements")
+      .select("destination_id")
+      .eq("origin_id", o.id)
+      .is("type_code", null),
+    getDestinations(),
+  ]);
+  const ids = new Set((rows ?? []).map((r) => r.destination_id as string));
+  return destinations.filter((d) => ids.has(d.id));
+}
+
 export async function getAllDestinationSlugs(): Promise<string[]> {
-  const { data } = await supabase.from("countries").select("slug");
-  return (data ?? []).map((c) => c.slug);
+  const destinations = await getDestinations();
+  return destinations.map((c) => c.slug);
 }
 
-/**
- * Return all published blog post slugs (en locale) for sitemap generation.
- */
-export async function getAllBlogSlugs(): Promise<string[]> {
+/** Blog translations (one row per post and locale) for the sitemap. */
+export async function getAllBlogTranslations(): Promise<
+  { post_id: string; locale: Locale; slug: string; updated_at: string }[]
+> {
   const { data } = await supabase
     .from("blog_post_translations")
-    .select("slug")
-    .eq("locale", "en");
-  return (data ?? []).map((p) => p.slug);
-}
-
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
-/**
- * Client-side hydration helper: converts a raw VisaRequirement into a
- * client-ready object with localized, formatted values for the given locale.
- * Used by client components that receive raw Supabase data from server pages.
- *
- * Implements override resolution: if req columns are NULL, falls back to
- * visa_types defaults (already resolved in getRequirement).
- */
-export function hydrateRequirement(
-  req: VisaRequirement,
-  locale: Locale
-): {
-  origin: string;
-  destination: string;
-  typeCode?: string;
-  visaRequired: string;
-  visaType: string;
-  entryType: string;
-  validity: string;
-  maxStay: string;
-  processingTime: string;
-  officialFee: string;
-  mandatoryDocs: string[];
-  supportingDocs: string[];
-  steps: string[];
-  fees: { item: string; cost: string }[];
-  feeTotal: string;
-  applyUrl: string;
-  embassyUrl: string;
-  lastVerified: string;
-  detailed: boolean;
-} {
-  return {
-    origin: req.origin_id,
-    destination: req.destination_id,
-    typeCode: req.type_code ?? undefined,
-    visaRequired: t(
-      { en: req.visa_required, fr: req.visa_required, es: req.visa_required, ar: req.visa_required },
-      locale
-    ) ?? req.visa_required,
-    visaType: t(req.visa_type, locale) ?? "",
-    entryType: req.entry_type,
-    validity: formatValidity(req.validity_days),
-    maxStay: formatMaxStay(req.max_stay_days),
-    processingTime: formatProcessingDays(req.processing_days_min, req.processing_days_max),
-    officialFee: formatFee(req.official_fee_amount, req.official_fee_currency, locale),
-    mandatoryDocs: tArray(req.mandatory_docs, locale),
-    supportingDocs: tArray(req.supporting_docs, locale),
-    steps: tArray(req.steps, locale),
-    fees: (req.fees as FeeItem[]).map((f) => ({
-      item: t(f.label, locale) ?? f.key,
-      cost: formatFeeRange(f.min, f.max, f.currency, locale),
-    })),
-    feeTotal: formatFeeRange(req.fee_total_min, req.fee_total_max, req.official_fee_currency, locale),
-    applyUrl: req.apply_url,
-    embassyUrl: req.embassy_url,
-    lastVerified: req.last_verified,
-    detailed: req.detailed,
-  };
-}
-
-/**
- * Client-side hydration helper: converts a raw Country into a client-ready
- * object with localized name and flag emoji for the given locale.
- */
-export function hydrateCountry(country: Country, locale: Locale): {
-  id: string;
-  slug: string;
-  name: string;
-  flag: string;
-} {
-  return {
-    id: country.id,
-    slug: country.slug,
-    name: (t(country.name, locale) ?? (country.name as Record<string, string>).en ?? "Unknown") as string,
-    flag: flagFromIso(country.iso_code),
-  };
-}
-
-/**
- * Client-side hydration helper: converts a raw VisaType into a client-ready
- * object with localized name/description for the given locale.
- */
-export function hydrateVisaType(
-  visaType: VisaType,
-  locale: Locale
-): {
-  code: string;
-  name: string;
-  icon: string;
-  description: string;
-  stay: string;
-  processing: string;
-} {
-  return {
-    code: visaType.code,
-    name: (t(visaType.name, locale) ?? (visaType.name as Record<string, string>).en ?? "") as string,
-    icon: visaType.icon,
-    description: (t(visaType.description, locale) ?? (visaType.description as Record<string, string>).en ?? "") as string,
-    stay: formatMaxStay(visaType.stay_days_max),
-    processing: formatProcessingDays(visaType.processing_days_min, visaType.processing_days_max),
-  };
-}
-
-/**
- * Client-side hydration helper: converts a raw BlogPostWithTranslation into
- * a client-ready BlogPost object.
- * Optionally accepts a list of countries to resolve related_origin_id /
- * related_destination_id UUIDs into slugs for client-side comparison.
- */
-export function hydrateBlogPost(
-  post: BlogPostWithTranslation,
-  locale: Locale,
-  countries?: Country[]
-): BlogPost {
-  const countryById = countries
-    ? Object.fromEntries(countries.map((c) => [c.id, c.slug]))
-    : {};
-
-  return {
-    id: post.id,
-    slug: post.slug,
-    title: post.title,
-    excerpt: post.excerpt,
-    cover: post.blog_posts.cover_url,
-    tags: post.blog_posts.tags,
-    date: post.blog_posts.date,
-    readTime: post.blog_posts.read_time,
-    author: post.blog_posts.author,
-    related: {
-      origin: post.blog_posts.related_origin_id
-        ? countryById[post.blog_posts.related_origin_id]
-        : undefined,
-      destination: post.blog_posts.related_destination_id
-        ? countryById[post.blog_posts.related_destination_id]
-        : undefined,
-    },
-    content: post.content.split("\n\n").filter(Boolean),
-    published: post.blog_posts.published,
-    created_at: post.blog_posts.created_at,
-    updated_at: post.blog_posts.updated_at,
-  };
+    .select("post_id, locale, slug, updated_at");
+  return (data ?? []) as {
+    post_id: string;
+    locale: Locale;
+    slug: string;
+    updated_at: string;
+  }[];
 }
 
 /**

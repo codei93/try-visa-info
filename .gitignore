@@ -31,3 +31,10 @@ dist-ssr
 *.sln
 *.sw?
 .next
+
+# Secrets and build artifacts (never commit)
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.next

@@ -5,7 +5,7 @@ import { Fragment } from "react";
 import type { Country, VisaType } from "@/types/database";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/types/database";
-import { hydrateCountry, hydrateVisaType } from "@/lib/data";
+import { hydrateCountry, hydrateVisaType } from "@/lib/hydrate";
 import { AdBanner } from "@/components/site/Ads";
 import { Breadcrumbs, Disclaimer } from "@/components/site/Layout";
 import { SearchWidget } from "@/components/site/SearchWidget";

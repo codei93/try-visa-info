@@ -22,9 +22,10 @@ const navLinks: { to: "/" | "/blog" | "/about" | "/contact"; key: TKey }[] = [
 
 function Logo() {
   const { theme } = useTheme();
+  const { href } = useI18n();
   const isDark = theme === "dark";
   return (
-    <Link href="/" className="flex items-center gap-2">
+    <Link href={href("/")} className="flex items-center gap-2">
       <img
         src={isDark ? "/assets/logo-dark-mode.png" : "/assets/logo-light-mode.png"}
         alt="TryVisaInfo"
@@ -76,7 +77,7 @@ function LanguageSwitcher() {
 }
 
 export function Navbar() {
-  const { t } = useI18n();
+  const { t, href } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-nav shadow-sm backdrop-blur-md">
@@ -86,7 +87,7 @@ export function Navbar() {
           {navLinks.map((l) => (
             <Link
               key={l.to}
-              href={l.to}
+              href={href(l.to)}
               className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
             >
               {t(l.key)}
@@ -110,7 +111,7 @@ export function Navbar() {
           {navLinks.map((l) => (
             <Link
               key={l.to}
-              href={l.to}
+              href={href(l.to)}
               onClick={() => setOpen(false)}
               className="block rounded-md px-3 py-2 text-sm font-medium hover:bg-muted"
             >
@@ -124,7 +125,7 @@ export function Navbar() {
 }
 
 export function Footer() {
-  const { t } = useI18n();
+  const { t, href } = useI18n();
   return (
     <footer className="mt-16 border-t border-border bg-footer text-muted-foreground">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 md:grid-cols-3">
@@ -134,11 +135,11 @@ export function Footer() {
         </div>
         <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm md:col-span-2 md:justify-end">
           {navLinks.map((l) => (
-            <Link key={l.to} href={l.to} className="hover:text-foreground">
+            <Link key={l.to} href={href(l.to)} className="hover:text-foreground">
               {t(l.key)}
             </Link>
           ))}
-          <Link href="/privacy-policy" className="hover:text-foreground">
+          <Link href={href("/privacy-policy")} className="hover:text-foreground">
             {t("nav.privacy")}
           </Link>
         </nav>

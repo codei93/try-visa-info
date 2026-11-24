@@ -1,13 +1,18 @@
 import { type ReactNode } from "react";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Script from "next/script";
 
 import "../../styles.css";
 import { I18nProvider } from "@/lib/i18n";
 import { ThemeProvider } from "@/lib/theme";
+import { LOCALE_CODES, isLocale } from "@/lib/messages";
 import { Navbar, Footer } from "@/components/site/Layout";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { SITE_URL } from "@/lib/data";
 
-export const metadata = {
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "TryVisaInfo — Visa requirements, documents & fees",
   description:
     "Find visa requirements, documents, fees and processing times for any route.",
@@ -22,6 +27,10 @@ export const metadata = {
   },
 };
 
+export function generateStaticParams() {
+  return LOCALE_CODES.map((locale) => ({ locale }));
+}
+
 export default async function RootLayout({
   children,
   params,
@@ -29,7 +38,8 @@ export default async function RootLayout({
   children: ReactNode;
   params: Promise<{ locale: string }>;
 }) {
-  const locale = (await params).locale as "en" | "fr" | "es" | "ar";
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
 
   return (
     <html lang={locale} dir={locale === "ar" ? "rtl" : "ltr"} suppressHydrationWarning>
@@ -50,7 +60,7 @@ export default async function RootLayout({
       </head>
       <body>
         <ThemeProvider>
-          <I18nProvider initialLocale={locale}>
+          <I18nProvider locale={locale}>
             <QueryProvider>
               <div className="flex min-h-screen flex-col">
                 <Navbar />

@@ -1,110 +1,86 @@
+import type { MetadataRoute } from "next";
 import {
-  getAllOriginDestinationPairs,
+  getAllDetailedRoutePairs,
   getAllDestinationSlugs,
-  getAllBlogSlugs,
+  getAllBlogTranslations,
   SITE_URL,
 } from "@/lib/data";
+import { LOCALE_CODES } from "@/lib/messages";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 86400;
 
-export default function Sitemap() {
-  return null;
+type Entry = MetadataRoute.Sitemap[number];
+
+/** One entry per locale, each pointing at all language alternates. */
+function localized(
+  path: (locale: string) => string,
+  extra: Pick<Entry, "changeFrequency" | "priority" | "lastModified">
+): Entry[] {
+  const languages = Object.fromEntries(
+    LOCALE_CODES.map((l) => [l, `${SITE_URL}${path(l)}`])
+  );
+  languages["x-default"] = `${SITE_URL}${path("en")}`;
+  return LOCALE_CODES.map((l) => ({
+    url: `${SITE_URL}${path(l)}`,
+    alternates: { languages },
+    ...extra,
+  }));
 }
 
-const LOCALES = ["en", "fr", "es", "ar"] as const;
-
-export async function sitemap() {
-  const [destSlugs, pairs, blogSlugs] = await Promise.all([
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [destSlugs, pairs, blogRows] = await Promise.all([
     getAllDestinationSlugs(),
-    getAllOriginDestinationPairs(),
-    getAllBlogSlugs(),
+    getAllDetailedRoutePairs(), // only hand-verified pairs are indexable
+    getAllBlogTranslations(),
   ]);
 
-  const paths: Array<{
-    url: string;
-    lastModified: string;
-    changeFreq?: string;
-    priority?: number;
-    alternates?: Array<{ lang: string; url: string }>;
-  }> = [];
+  const entries: Entry[] = [];
 
-  // Static pages
-  const staticPages = [
-    "",
-    "/blog",
-    "/about",
-    "/contact",
-    "/privacy-policy",
-  ];
-
-  for (const locale of LOCALES) {
-    for (const path of staticPages) {
-      paths.push({
-        url: `${SITE_URL}/${locale}${path}`,
-        lastModified: new Date().toISOString().split("T")[0],
-        changeFreq: "monthly",
-        priority: path === "" ? 1 : 0.8,
-        alternates: LOCALES.map((l) => ({
-          lang: l,
-          url: `${SITE_URL}/${l}${path}`,
-        })),
-      });
-    }
+  for (const p of ["", "/blog", "/about", "/contact", "/privacy-policy"]) {
+    entries.push(
+      ...localized((l) => `/${l}${p}`, {
+        changeFrequency: "monthly",
+        priority: p === "" ? 1 : 0.8,
+      })
+    );
   }
 
-  // Visa types pages
-  for (const locale of LOCALES) {
-    for (const destSlug of destSlugs) {
-      paths.push({
-        url: `${SITE_URL}/${locale}/visa-types/${destSlug}`,
-        lastModified: new Date().toISOString().split("T")[0],
-        changeFreq: "monthly",
+  for (const slug of destSlugs) {
+    entries.push(
+      ...localized((l) => `/${l}/visa-types/${slug}`, {
+        changeFrequency: "monthly",
         priority: 0.8,
-        alternates: LOCALES.map((l) => ({
-          lang: l,
-          url: `${SITE_URL}/${l}/visa-types/${destSlug}`,
-        })),
-      });
-    }
+      })
+    );
   }
 
-  // Visa result pages
-  for (const locale of LOCALES) {
-    for (const pair of pairs) {
-      paths.push({
-        url: `${SITE_URL}/${locale}/${pair.origin}/${pair.destination}`,
-        lastModified: new Date().toISOString().split("T")[0],
-        changeFreq: "monthly",
+  for (const pair of pairs) {
+    entries.push(
+      ...localized((l) => `/${l}/${pair.origin}/${pair.destination}`, {
+        changeFrequency: "monthly",
         priority: 0.7,
-        alternates: LOCALES.map((l) => ({
-          lang: l,
-          url: `${SITE_URL}/${l}/${pair.origin}/${pair.destination}`,
-        })),
-      });
-    }
+      })
+    );
   }
 
-  // Blog posts
-  for (const locale of LOCALES) {
-    for (const slug of blogSlugs) {
-      paths.push({
-        url: `${SITE_URL}/${locale}/blog/${slug}`,
-        lastModified: new Date().toISOString().split("T")[0],
-        changeFreq: "monthly",
-        priority: 0.7,
-        alternates: LOCALES.map((l) => ({
-          lang: l,
-          url: `${SITE_URL}/${l}/blog/${slug}`,
-        })),
-      });
-    }
+  // Blog slugs differ per language, so alternates are grouped by post id.
+  const byPost = new Map<string, Record<string, string>>();
+  for (const row of blogRows) {
+    const langs = byPost.get(row.post_id) ?? {};
+    langs[row.locale] = `${SITE_URL}/${row.locale}/blog/${row.slug}`;
+    byPost.set(row.post_id, langs);
+  }
+  for (const row of blogRows) {
+    const languages = { ...byPost.get(row.post_id)! };
+    if (languages.en) languages["x-default"] = languages.en;
+    entries.push({
+      url: `${SITE_URL}/${row.locale}/blog/${row.slug}`,
+      lastModified: row.updated_at,
+      changeFrequency: "monthly",
+      priority: 0.7,
+      alternates: { languages },
+    });
   }
 
-  return paths.map((p) => ({
-    url: p.url,
-    lastModified: p.lastModified,
-    changeFreq: p.changeFreq,
-    priority: p.priority,
-    alternates: p.alternates,
-  }));
+  return entries;
 }

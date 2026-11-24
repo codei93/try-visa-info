@@ -7,7 +7,7 @@ import { AdBanner } from "@/components/site/Ads";
 import type { Country } from "@/types/database";
 import { useI18n, type TKey } from "@/lib/i18n";
 import type { Locale } from "@/types/database";
-import { hydrateCountry } from "@/lib/data";
+import { hydrateCountry } from "@/lib/hydrate";
 
 const why: { icon: typeof BadgeCheck; key: TKey }[] = [
   { icon: BadgeCheck, key: "why.1" },
@@ -77,8 +77,10 @@ export default function HomePageContent({
         <h2 className="mb-8 text-3xl font-bold">{t("popular.title")}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {popularRoutes.map(([o, d]) => {
-            const oc = getOrigin(o)!,
-              dc = getDestination(d)!;
+            const oc = getOrigin(o),
+              dc = getDestination(d);
+            // Skip featured routes whose countries are not in the database yet.
+            if (!oc || !dc) return null;
             return (
               <Link
                 key={o + d}

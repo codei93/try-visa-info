@@ -1,4 +1,7 @@
-import { getBlogPosts, getOrigins, getDestinations, hydrateBlogPost } from "@/lib/data";
+import { notFound } from "next/navigation";
+import { getBlogPosts } from "@/lib/data";
+import { hydrateBlogPost } from "@/lib/hydrate";
+import { isLocale } from "@/lib/messages";
 import { BlogListPageContent } from "@/components/blog/BlogListPageContent";
 
 export const metadata = {
@@ -21,15 +24,17 @@ export default async function BlogList({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: { page?: string };
+  searchParams: Promise<{ page?: string }>;
 }) {
-  const locale = (await params).locale;
-  const page = parseInt(searchParams.page ?? "1", 10) || 1;
-  const posts = await getBlogPosts(locale as any);
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  const posts = await getBlogPosts(locale);
   const pages = Math.max(1, Math.ceil(posts.length / 10));
   const paginated = posts
     .slice((page - 1) * 10, page * 10)
-    .map((p) => hydrateBlogPost(p, locale as any));
+    .map((p) => hydrateBlogPost(p, locale));
   return <BlogListPageContent page={page} pages={pages} posts={paginated} />;
 }
 
