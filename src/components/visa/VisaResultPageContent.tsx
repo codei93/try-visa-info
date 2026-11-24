@@ -4,18 +4,19 @@ import Link from "next/link";
 import { BadgeCheck, Building2, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import type {
+  VisaStatus,
   VisaRequirement,
   Country,
   BlogPost,
   VisaType,
 } from "@/types/database";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TKey } from "@/lib/i18n";
 import type { Locale } from "@/types/database";
 import {
   hydrateRequirement,
   hydrateCountry,
   hydrateVisaType,
-} from "@/lib/data";
+} from "@/lib/hydrate";
 import { AdBanner, AdSidebar } from "@/components/site/Ads";
 import { Breadcrumbs, Disclaimer } from "@/components/site/Layout";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,7 +40,7 @@ export function VisaResultPageContent({
   blogPosts,
   visaTypes,
 }: VisaResultPageContentProps) {
-  const { t, locale } = useI18n();
+  const { t, locale, href } = useI18n();
   const hydrated = hydrateRequirement(req, locale as Locale);
   const hydratedOrigin = hydrateCountry(o, locale as Locale);
   const hydratedDest = hydrateCountry(d, locale as Locale);
@@ -51,10 +52,10 @@ export function VisaResultPageContent({
   const tileConfigs: {
     key: string;
     label: string;
-    badge?: string;
+    badge?: boolean;
     value?: string;
   }[] = [
-    { key: "visa.required", label: t("visa.required"), badge: hydrated.visaRequired },
+    { key: "visa.required", label: t("visa.required"), badge: true },
     { key: "visa.type", label: t("visa.type"), value: hydrated.visaType },
     { key: "visa.entry", label: t("visa.entry"), value: hydrated.entryType },
     { key: "visa.validity", label: t("visa.validity"), value: hydrated.validity },
@@ -74,17 +75,28 @@ export function VisaResultPageContent({
     <div className="mx-auto max-w-6xl px-4 py-8">
       <Breadcrumbs
         items={[
-          { label: t("nav.home"), to: `/${locale}` },
+          { label: t("nav.home"), to: href("/") },
           { label: hydratedOrigin.name },
-          { label: `${hydratedDest.name} visa requirements` },
+          { label: t("visa.breadcrumb", { destination: hydratedDest.name }) },
         ]}
       />
       <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-        {hydratedOrigin.flag} {hydratedOrigin.name} → {hydratedDest.flag} {hydratedDest.name} Visa Requirements
+        {t("visa.h1", {
+          origin: `${hydratedOrigin.flag} ${hydratedOrigin.name}`,
+          destination: `${hydratedDest.flag} ${hydratedDest.name}`,
+        })}
       </h1>
-      <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-sm font-semibold text-secondary-foreground">
-        <BadgeCheck className="size-4" /> {t("visa.verified")}: {hydrated.lastVerified}
-      </div>
+      {hydrated.lastVerified && (
+        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-sm font-semibold text-secondary-foreground">
+          <BadgeCheck className="size-4" /> {t("visa.verified")}:{" "}
+          {new Date(hydrated.lastVerified).toLocaleDateString(locale, {
+            timeZone: "UTC",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </div>
+      )}
       {!hydrated.detailed && <p className="mt-3 text-sm text-muted-foreground">{t("visa.generic")}</p>}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -98,7 +110,7 @@ export function VisaResultPageContent({
                   </p>
                   <div className="mt-1 font-semibold">
                     {tile.badge ? (
-                      <RequiredBadge v={tile.badge} />
+                      <RequiredBadge status={hydrated.status} days={hydrated.visaFreeDays} />
                     ) : (
                       tile.value
                     )}
@@ -128,6 +140,7 @@ export function VisaResultPageContent({
             </ol>
           </Card>
 
+          {(hydrated.fees.length > 0 || hydrated.feeTotal) && (
           <Card title={t("visa.fees")}>
             <table className="w-full text-sm">
               <thead>
@@ -143,28 +156,35 @@ export function VisaResultPageContent({
                     <td className="py-2 text-end">{f.cost}</td>
                   </tr>
                 ))}
-                <tr className="font-bold">
-                  <td className="py-3 uppercase">{t("visa.total")}</td>
-                  <td className="py-3 text-end">{hydrated.feeTotal}</td>
-                </tr>
+                {hydrated.feeTotal && (
+                  <tr className="font-bold">
+                    <td className="py-3 uppercase">{t("visa.total")}</td>
+                    <td className="py-3 text-end">{hydrated.feeTotal}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
             <div className="mt-4">
               <Disclaimer>{t("visa.feeNote")}</Disclaimer>
             </div>
           </Card>
+          )}
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="flex-1">
-              <a href={hydrated.applyUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink /> {t("visa.apply")}
-              </a>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="flex-1">
-              <a href={hydrated.embassyUrl} target="_blank" rel="noopener noreferrer">
-                <Building2 /> {t("visa.embassy")}
-              </a>
-            </Button>
+            {hydrated.applyUrl && (
+              <Button asChild size="lg" className="flex-1">
+                <a href={hydrated.applyUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink /> {t("visa.apply")}
+                </a>
+              </Button>
+            )}
+            {hydrated.embassyUrl && (
+              <Button asChild size="lg" variant="outline" className="flex-1">
+                <a href={hydrated.embassyUrl} target="_blank" rel="noopener noreferrer">
+                  <Building2 /> {t("visa.embassy")}
+                </a>
+              </Button>
+            )}
           </div>
 
           <Card title={t("types.title", { country: hydratedDest.name })}>
@@ -175,7 +195,7 @@ export function VisaResultPageContent({
                 return (
                   <Link
                     key={v.code}
-                    href={`/${locale}/${hydratedOrigin.slug}/${hydratedDest.slug}?type=${v.code}`}
+                    href={href(`/visa-types/${hydratedDest.slug}`)}
                     aria-current={active ? "true" : undefined}
                     className={cn(
                       "rounded-lg border p-4 transition hover:border-primary hover:bg-muted",
@@ -202,7 +222,7 @@ export function VisaResultPageContent({
               })}
             </div>
             <Link
-              href={`/visa-types/${hydratedDest.slug}`}
+              href={href(`/visa-types/${hydratedDest.slug}`)}
               className="mt-4 inline-block text-sm font-medium text-primary"
             >
               {t("common.visaTypes")}: {hydratedDest.name} →
@@ -219,16 +239,16 @@ export function VisaResultPageContent({
               {related.map((x) => (
                 <li key={x.slug}>
                   <Link
-                    href={`/${locale}/${hydratedOrigin.slug}/${x.slug}`}
+                    href={href(`/${hydratedOrigin.slug}/${x.slug}`)}
                     className="block rounded-md px-2 py-1.5 text-sm hover:bg-muted hover:text-primary"
                   >
-                    → {hydratedOrigin.name} to {x.flag} {x.name}
+                    {x.flag} {x.name}
                   </Link>
                 </li>
               ))}
             </ul>
             <Link
-              href={`/visa-types/${hydratedDest.slug}`}
+              href={href(`/visa-types/${hydratedDest.slug}`)}
               className="mt-3 block text-sm font-medium text-primary"
             >
               {t("common.visaTypes")}: {hydratedDest.name} →
@@ -239,7 +259,7 @@ export function VisaResultPageContent({
               {posts.map((p) => (
                 <li key={p.slug}>
                   <Link
-                    href={`/${locale}/blog/${p.slug}`}
+                    href={href(`/blog/${p.slug}`)}
                     className="text-sm hover:text-primary"
                   >
                     {p.title}
@@ -313,17 +333,32 @@ function Checklist({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function RequiredBadge({ v }: { v: string }) {
+const STATUS_STYLE: Record<VisaStatus, string> = {
+  "visa-free": "bg-secondary text-secondary-foreground",
+  "on-arrival": "bg-secondary text-secondary-foreground",
+  eta: "bg-accent text-accent-foreground",
+  "e-visa": "bg-accent text-accent-foreground",
+  "visa-required": "bg-destructive text-destructive-foreground",
+  "not-admitted": "bg-destructive text-destructive-foreground",
+};
+
+function RequiredBadge({ status, days }: { status: VisaStatus; days: number | null }) {
   const { t } = useI18n();
-  const map: Record<string, [string, string]> = {
-    yes: ["bg-destructive text-destructive-foreground", t("visa.yes")],
-    no: ["bg-secondary text-secondary-foreground", t("visa.no")],
-    "on-arrival": ["bg-accent text-accent-foreground", t("visa.onArrival")],
-  };
-  const [cls, label] = map[v] ?? map["yes"];
   return (
-    <span className={cn("rounded-full px-2.5 py-0.5 text-sm font-bold", cls)}>
-      {label}
+    <span className="flex flex-wrap items-center gap-2">
+      <span
+        className={cn(
+          "rounded-full px-2.5 py-0.5 text-sm font-bold",
+          STATUS_STYLE[status] ?? STATUS_STYLE["visa-required"],
+        )}
+      >
+        {t(`visa.status.${status}` as TKey)}
+      </span>
+      {status === "visa-free" && days != null && (
+        <span className="text-xs font-normal text-muted-foreground">
+          {t("visa.freeDays", { days: String(days) })}
+        </span>
+      )}
     </span>
   );
 }

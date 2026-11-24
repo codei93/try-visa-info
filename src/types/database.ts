@@ -65,30 +65,44 @@ export interface FeeItem {
   currency: string;
 }
 
+export type VisaStatus =
+  | 'visa-free'
+  | 'visa-required'
+  | 'e-visa'
+  | 'eta'
+  | 'on-arrival'
+  | 'not-admitted';
+
+/**
+ * A visa_requirements row with template defaults from visa_types already merged
+ * in (non-null override on the row wins, otherwise the visa_types default).
+ * Fields that are unknown for a pair stay null; nothing is invented.
+ */
 export interface VisaRequirement {
   id: string;
   origin_id: string;
   destination_id: string;
   type_code: string | null;
-  visa_required: 'yes' | 'no' | 'on-arrival';
+  status: VisaStatus;
+  visa_free_days: number | null;
   visa_type: Record<Locale, string>;
-  entry_type: 'single' | 'multiple' | 'n/a';
+  entry_type: 'single' | 'multiple' | 'n/a' | null;
   validity_days: number | null;
   max_stay_days: number | null;
-  processing_days_min: number;
-  processing_days_max: number;
-  official_fee_amount: number;
-  official_fee_currency: string;
+  processing_days_min: number | null;
+  processing_days_max: number | null;
+  fee_amount: number | null;
+  fee_currency: string | null;
   mandatory_docs: Record<Locale, string[]>;
   supporting_docs: Record<Locale, string[]>;
   steps: Record<Locale, string[]>;
   fees: FeeItem[];
   fee_total_min: number | null;
   fee_total_max: number | null;
-  apply_url: string;
-  embassy_url: string;
+  apply_url: string | null;
+  embassy_url: string | null;
   source_url: string | null;
-  last_verified: string;
+  last_verified: string | null;
   detailed: boolean;
   created_at: string;
   updated_at: string;
