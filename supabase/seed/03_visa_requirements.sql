@@ -65,11 +65,9 @@ FROM (VALUES
    NULL, NULL, NULL, NULL, NULL, NULL,
    NULL, NULL,
    NULL, NULL,
-   '{}'::jsonb, '{}'::jsonb,
    NULL, NULL,
-   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25',
-   'manual',
-   false
+   NULL, NULL,
+   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25'
   ),
 
   -- Canada → China (visa-free 30 days per China NIA)
@@ -77,11 +75,9 @@ FROM (VALUES
    NULL, NULL, NULL, NULL, NULL, NULL,
    NULL, NULL,
    NULL, NULL,
-   '{}'::jsonb, '{}'::jsonb,
    NULL, NULL,
-   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25',
-   'manual',
-   false
+   NULL, NULL,
+   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25'
   ),
 
   -- All other origins → China (standard fee $140 USD equivalent)
@@ -258,11 +254,9 @@ FROM (VALUES
    NULL, NULL, NULL, NULL, NULL, NULL,
    NULL, NULL,
    NULL, NULL,
-   '{}'::jsonb, '{}'::jsonb,
    NULL, NULL,
-   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25',
-   'manual',
-   false
+   NULL, NULL,
+   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25'
   ),
 
   ('MX', 'CN', 'visa-required', NULL,
@@ -294,11 +288,9 @@ FROM (VALUES
    NULL, NULL, NULL, NULL, NULL, NULL,
    NULL, NULL,
    NULL, NULL,
-   '{}'::jsonb, '{}'::jsonb,
    NULL, NULL,
-   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25',
-   'manual',
-   false
+   NULL, NULL,
+   'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', NULL, 'https://en.nia.gov.cn/n147418/n147463/c183390/content.html', '2026-11-25'
   ),
 
   ('EC', 'CN', 'visa-required', NULL,
